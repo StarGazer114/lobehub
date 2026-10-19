@@ -1,9 +1,15 @@
-import { PageAgentIdentifier } from '@lobechat/builtin-tool-page-agent';
+import {
+  applyHtmlEdit,
+  HTML_PAGE_TOOL_HINT,
+  PageAgentIdentifier,
+  RICH_TEXT_PAGE_TOOL_HINT,
+} from '@lobechat/builtin-tool-page-agent';
 import {
   PageAgentExecutionRuntime,
   type PageAgentInvocationContext,
   type PageAgentRuntimeService,
 } from '@lobechat/builtin-tool-page-agent/executionRuntime';
+import { HTML_DOCUMENT_FILE_TYPE } from '@lobechat/const';
 import { EditorRuntime, formatModifyNodesResult } from '@lobechat/editor-runtime';
 import { type HeadlessEditor } from '@lobehub/editor/headless';
 import type { SerializedEditorState, SerializedLexicalNode } from 'lexical';
@@ -23,6 +29,7 @@ type EditorRuntimeEditorParam = Parameters<EditorRuntime['setEditor']>[0];
 interface DocumentSnapshot {
   content: string;
   editorData: Record<string, unknown> | null;
+  fileType: string;
   title: string;
 }
 
@@ -123,6 +130,7 @@ const loadSnapshot = async (
   return {
     content: doc.content ?? '',
     editorData: (doc.editorData ?? null) as Record<string, unknown> | null,
+    fileType: doc.fileType,
     title: doc.title ?? 'Untitled',
   };
 };
@@ -207,6 +215,9 @@ const withEditor = async (
   // (persist: false) never write, so they skip the lock.
   const run = async (lockOwnerId?: string): Promise<HandlerOutput> => {
     const snapshot = await loadSnapshot(documentModel, documentId);
+    // Hydrating an HTML page as Markdown and writing the export back would
+    // replace the page with Markdown; node APIs never run on one.
+    if (snapshot.fileType === HTML_DOCUMENT_FILE_TYPE) throw new Error(HTML_PAGE_TOOL_HINT);
     const env = buildEnv(snapshot, documentId);
 
     try {
@@ -274,6 +285,46 @@ const withEditor = async (
     } finally {
       env.headless.destroy();
     }
+  };
+
+  return persist ? documentService.runWithDocumentLock(documentId, run) : run();
+};
+
+interface HtmlHandlerOutput extends HandlerOutput {
+  /** The new HTML to persist; omitted for a read. */
+  html?: string;
+}
+
+/**
+ * Raw-text read-modify-write of an HTML page under the same document lock as
+ * the node APIs. Refuses rich-text pages, whose body is not an HTML document.
+ */
+const withHtmlPage = async (
+  { documentModel, documentService }: PageAgentServiceContext,
+  ctx: PageAgentInvocationContext,
+  handler: (html: string) => HtmlHandlerOutput,
+  { persist }: { persist: boolean },
+): Promise<HandlerOutput> => {
+  const documentId = ctx.documentId;
+  if (!documentId) throw new Error('documentId is required');
+
+  const run = async (lockOwnerId?: string): Promise<HandlerOutput> => {
+    const snapshot = await loadSnapshot(documentModel, documentId);
+    if (snapshot.fileType !== HTML_DOCUMENT_FILE_TYPE) throw new Error(RICH_TEXT_PAGE_TOOL_HINT);
+
+    const { content, html, state } = handler(snapshot.content);
+    if (persist && html !== undefined) {
+      await documentService.updateDocument(documentId, {
+        content: html,
+        ...(lockOwnerId ? { lockOwnerId } : {}),
+        saveSource: 'llm_call',
+      });
+    }
+
+    return {
+      content,
+      state: { ...state, documentContent: html ?? snapshot.content, documentTitle: snapshot.title },
+    };
   };
 
   return persist ? documentService.runWithDocumentLock(documentId, run) : run();
@@ -355,6 +406,41 @@ const buildService = (
           },
         };
       }),
+
+    readHtml: (_args, ctx) =>
+      withHtmlPage(
+        serviceCtx,
+        ctx,
+        (html) => ({ content: html, state: { charCount: html.length, html } }),
+        { persist: false },
+      ),
+
+    editHtml: (args, ctx) =>
+      withHtmlPage(
+        serviceCtx,
+        ctx,
+        (current) => {
+          const { html, replacementCount } = applyHtmlEdit(current, args);
+          return {
+            content: `Replaced ${replacementCount} occurrence(s) in the page HTML.`,
+            html,
+            state: { charCount: html.length, replacementCount },
+          };
+        },
+        { persist: true },
+      ),
+
+    writeHtml: (args, ctx) =>
+      withHtmlPage(
+        serviceCtx,
+        ctx,
+        () => ({
+          content: `Page HTML replaced (${args.html.length} characters).`,
+          html: args.html,
+          state: { charCount: args.html.length },
+        }),
+        { persist: true },
+      ),
 
     replaceText: (args, ctx) =>
       withEditor(serviceCtx, 'replaceText', ctx, async ({ runtime }) => {
