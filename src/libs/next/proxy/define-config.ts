@@ -4,7 +4,6 @@ import { NextResponse } from 'next/server';
 import { UAParser } from 'ua-parser-js';
 import urlJoin from 'url-join';
 
-import { auth } from '@/auth';
 import { LOBE_LOCALE_COOKIE } from '@/const/locale';
 import { appEnv } from '@/envs/app';
 import { authEnv } from '@/envs/auth';
@@ -20,6 +19,22 @@ import { createRouteMatcher } from './createRouteMatcher';
 // Create debug logger instances
 const logDefault = debug('middleware:default');
 const logBetterAuth = debug('middleware:better-auth');
+
+// Better Auth session cookies (default prefix `better-auth`, `__Secure-` under HTTPS).
+// The middleware only needs to know whether a session cookie exists: full session
+// validation pulls the whole DB/crypto module graph (better-auth, drizzle, pg,
+// aws-sdk) into the middleware bundle, which is fragile on platforms that wrap
+// Node.js middleware into an edge runtime (e.g. Netlify). Route handlers and tRPC
+// `protectedProcedure` still verify the session properly.
+const SESSION_COOKIE_NAMES = ['better-auth.session_token', '__Secure-better-auth.session_token'];
+
+const hasSessionCookie = (cookieHeader: string | null): boolean => {
+  if (!cookieHeader) return false;
+
+  const names = cookieHeader.split(';').map((part) => part.split('=')[0]?.trim());
+
+  return SESSION_COOKIE_NAMES.some((name) => names.includes(name));
+};
 
 // Dev-only debug proxy route should bypass all middleware rewrites.
 const dangerousLocalDevProxyRoute = '/_dangerous_local_dev_proxy';
@@ -284,16 +299,11 @@ export function defineConfig() {
     // Skip session lookup for public routes to reduce latency
     if (!isProtected) return response;
 
-    // Get full session with user data (Next.js 15.2.0+ feature)
-    const session = await auth.api.getSession({
-      headers: req.headers,
-    });
+    const isLoggedIn = hasSessionCookie(req.headers.get('cookie'));
 
-    const isLoggedIn = !!session?.user;
-
-    logBetterAuth('BetterAuth session status: %O', {
+    logBetterAuth('BetterAuth session cookie status: %O', {
+      hasCookieHeader: !!req.headers.get('cookie'),
       isLoggedIn,
-      userId: session?.user?.id,
     });
 
     if (!isLoggedIn) {

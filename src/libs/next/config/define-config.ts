@@ -382,7 +382,14 @@ export function defineConfig(config: CustomNextConfig) {
       // compile (opennextjs-netlify#3560). Bundling the AWS SDK into the chunk
       // keeps it out of that external-module path.
       ...(process.env.NETLIFY
-        ? ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner', '@aws-sdk/lib-storage']
+        ? [
+            '@aws-sdk/client-s3',
+            '@aws-sdk/s3-request-presigner',
+            '@aws-sdk/lib-storage',
+            // middleware-only deps: keep them bundled too, same reason as above
+            'ua-parser-js',
+            'url-join',
+          ]
         : []),
     ],
     turbopack: {
