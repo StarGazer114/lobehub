@@ -1,5 +1,5 @@
 [build]
-command = "rm -rf .next node_modules/.cache && pnpm run build && echo SIZE_REPORT_START && du -sh .netlify/functions-internal/___netlify-server-handler && du -sh .netlify/functions-internal/___netlify-server-handler/node_modules/.pnpm/* 2>/dev/null | sort -h | tail -40 && echo SIZE_REPORT_END"
+command = "rm -rf .next node_modules/.cache && pnpm run build"
 publish = ".next"
 
 [build.environment]
@@ -9,6 +9,9 @@ NODE_VERSION = "22"
 
 [[plugins]]
 package = "@netlify/plugin-nextjs"
+
+[[plugins]]
+package = "./netlify/plugins/du-report"
 
 [template.environment]
 OPENAI_API_KEY = "set your OpenAI API Key"
