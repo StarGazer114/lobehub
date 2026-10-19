@@ -375,7 +375,16 @@ export function defineConfig(config: CustomNextConfig) {
       'oidc-provider',
     ],
 
-    transpilePackages: ['mermaid'],
+    transpilePackages: [
+      'mermaid',
+      // Netlify wraps Node.js middleware into a Deno edge function and inlines
+      // its CJS externals as virtual modules, which the edge bundler cannot
+      // compile (opennextjs-netlify#3560). Bundling the AWS SDK into the chunk
+      // keeps it out of that external-module path.
+      ...(process.env.NETLIFY
+        ? ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner', '@aws-sdk/lib-storage']
+        : []),
+    ],
     turbopack: {
       rules: {
         ...(isTest
