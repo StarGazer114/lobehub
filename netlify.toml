@@ -4,6 +4,11 @@ publish = ".next"
 
 [build.environment]
 NODE_OPTIONS = "--max-old-space-size=4096"
+# Netlify build image defaults to Node 22; LobeHub needs >= 22.
+NODE_VERSION = "22"
+
+[[plugins]]
+package = "@netlify/plugin-nextjs"
 
 [template.environment]
 OPENAI_API_KEY = "set your OpenAI API Key"
