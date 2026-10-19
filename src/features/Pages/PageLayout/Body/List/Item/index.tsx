@@ -1,4 +1,4 @@
-import { Avatar, cssVar, Icon, Tooltip } from '@lobehub/ui';
+import { Avatar, createStaticStyles, cssVar, Icon, Tooltip } from '@lobehub/ui';
 import { FileTextIcon, LockIcon } from 'lucide-react';
 import { type MouseEvent } from 'react';
 import { memo, useCallback, useMemo, useRef } from 'react';
@@ -15,6 +15,29 @@ import { pageActions, pageSelectors, usePageStore } from '@/store/page';
 import Actions from './Actions';
 import Editing from './Editing';
 import { useDropdownMenu } from './useDropdownMenu';
+
+// The lock sits right after the title instead of at the row's end: the end is
+// where the hover actions overlay the row, which would hide the lock exactly
+// when the pointer reaches it.
+const styles = createStaticStyles(({ css }) => ({
+  lock: css`
+    flex: none;
+  `,
+  title: css`
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  `,
+  titleRow: css`
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+
+    max-width: 100%;
+
+    vertical-align: middle;
+  `,
+}));
 
 interface DocumentItemProps {
   className?: string;
@@ -96,17 +119,22 @@ const PageListItem = memo<DocumentItemProps>(({ pageId, className }) => {
         href={`/page/${pageId}`}
         icon={icon}
         key={pageId}
-        title={title}
-        extra={
-          isPrivate && (
-            <Tooltip title={t('pageList.privateTooltip')}>
-              <Icon
-                aria-label={t('pageList.privateTooltip')}
-                color={cssVar.colorTextDescription}
-                icon={LockIcon}
-                size={14}
-              />
-            </Tooltip>
+        title={
+          isPrivate ? (
+            <span className={styles.titleRow}>
+              <span className={styles.title}>{title}</span>
+              <Tooltip title={t('pageList.privateTooltip')}>
+                <Icon
+                  aria-label={t('pageList.privateTooltip')}
+                  className={styles.lock}
+                  color={cssVar.colorTextDescription}
+                  icon={LockIcon}
+                  size={14}
+                />
+              </Tooltip>
+            </span>
+          ) : (
+            title
           )
         }
         onClick={handleClick}
