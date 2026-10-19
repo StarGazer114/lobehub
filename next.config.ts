@@ -38,6 +38,18 @@ const netlifyConfig = {
       'node_modules/.pnpm/@next+swc-*/**',
       'node_modules/.pnpm/@playwright/**',
       'node_modules/.pnpm/playwright*/**',
+      // heaviest traced deps; the measurement showed these alone push the
+      // handler to 347 MB (ffmpeg-static 77 MB, sharp libvips 34 MB)
+      'node_modules/.pnpm/ffmpeg-static@*/**',
+      'node_modules/.pnpm/@img+sharp-libvips-*/**',
+      // third-party integration SDKs / document pipelines not needed for chat
+      'node_modules/.pnpm/@larksuiteoapi+node-sdk*/**',
+      'node_modules/.pnpm/discord.js@*/**',
+      'node_modules/.pnpm/@discordjs+*/**',
+      'node_modules/.pnpm/@sapphire+*/**',
+      'node_modules/.pnpm/@vladfrangu+*/**',
+      'node_modules/.pnpm/pdfkit@*/**',
+      'node_modules/.pnpm/pdfjs-dist@*/**',
     ],
   },
 };
